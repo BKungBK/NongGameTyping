@@ -1,0 +1,11 @@
+{
+  "screen_width": 1280,
+  "screen_height": 720,
+  "fps": 60,
+  "max_time_per_word": 20,
+  "growth_on_success": 0.05,
+  "growth_on_error": -0.05,
+  "growth_timer_interval": 5.0,
+  "growth_per_interval": 0.01,
+  "coins_per_growth": 5
+} 

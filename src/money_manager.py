@@ -10,4 +10,4 @@ class MoneyManager:
             self.coins += amount
 
     def get_display_value(self):
-        return f"Coins: {self.coins}"
+        return f"{self.coins}"
