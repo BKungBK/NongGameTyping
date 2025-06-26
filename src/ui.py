@@ -8,8 +8,8 @@ class UIManager:
         # --- ค่าคงที่ ---
         self.SCREEN_WIDTH = screen_width
         self.SCREEN_HEIGHT = screen_height
-        self.FONT_PATH = os.path.join('assets', 'fonts', 'NotoSansThai_Condensed-Bold.ttf')
-        self.FONT_PATH_X = os.path.join('assets', 'fonts', 'BotsmaticDemo-MXOr.ttf')
+        self.FONT_PATH = os.path.join('assets', 'fonts', 'PressStart2P-Regular.ttf')
+        self.FONT_PATH_X = os.path.join('assets', 'fonts', 'PressStart2P-Regular.ttf')
         
         # --- สีสำหรับธีมเกม ---
         self.COLOR_TEXT = (255, 255, 255)
@@ -22,17 +22,18 @@ class UIManager:
         self.COLOR_BOX_BG = (30, 30, 30, 200)
         self.COLOR_BOX_BORDER = (80, 80, 80)
         self.COLOR_ACCENT = (100, 200, 255)
-        self.COLOR_SUCCESS = (50, 255, 50)
-        self.COLOR_ERROR = (255, 50, 50)
-        self.COLOR_WARNING = (255, 200, 50)
+        self.COLOR_SUCCESS = (154, 245, 78)
+        self.COLOR_ERROR = (205, 86, 86)
+        self.COLOR_WARNING = (242, 245, 125)
+        self.COLOR_INFO = (242, 245, 125)
 
         # --- โหลดฟอนต์ ---
         try:
-            self.font_xlarge = pygame.font.Font(self.FONT_PATH_X, 96)
-            self.font_large = pygame.font.Font(self.FONT_PATH, 64)
-            self.font_medium = pygame.font.Font(self.FONT_PATH, 32)
-            self.font_small = pygame.font.Font(self.FONT_PATH, 24)
-            self.font_tiny = pygame.font.Font(self.FONT_PATH, 18)
+            self.font_xlarge = pygame.font.Font(self.FONT_PATH_X, 64)
+            self.font_large = pygame.font.Font(self.FONT_PATH, 32)
+            self.font_medium = pygame.font.Font(self.FONT_PATH, 24)
+            self.font_small = pygame.font.Font(self.FONT_PATH, 18)
+            self.font_tiny = pygame.font.Font(self.FONT_PATH, 12)
         except FileNotFoundError:
             print(f"Font file not found. Using default fonts.")
             self.font_xlarge = pygame.font.Font(None, 96)
@@ -97,24 +98,12 @@ class UIManager:
     def update(self, dt):
         """อัปเดตแอนิเมชันทั้งหมด"""
         self.animation_time += dt
-        
         # อัปเดต particle system
         self.update_particles(dt)
-        
         # อัปเดต UI animations
         self.ui_pulse_alpha = abs(math.sin(self.animation_time * 3)) * 50
-        
         # อัปเดต tree sway
         self.tree_sway_offset = math.sin(self.animation_time * 2) * 3
-        
-        # อัปเดต score pop animation
-        if self.score_pop_timer > 0:
-            self.score_pop_timer -= dt
-            progress = 1.0 - (self.score_pop_timer / 0.5)
-            self.score_pop_scale = 1.0 + (math.sin(progress * math.pi) * 0.3)
-        else:
-            self.score_pop_scale = 1.0
-            
         # อัปเดต combo glow
         self.combo_glow_intensity = abs(math.sin(self.animation_time * 4)) * 0.5 + 0.5
 
@@ -139,11 +128,9 @@ class UIManager:
             particle['y'] += particle['vy'] * dt
             particle['vy'] += 100 * dt  # gravity
             particle['lifetime'] -= dt
-            
             # ลด size ตามเวลา
             progress = particle['lifetime'] / particle['max_lifetime']
             particle['size'] = max(1, int(4 * progress))
-            
             if particle['lifetime'] <= 0:
                 self.particles.remove(particle)
 
@@ -152,11 +139,9 @@ class UIManager:
         for particle in self.particles:
             alpha = int(255 * (particle['lifetime'] / particle['max_lifetime']))
             color = (*particle['color'][:3], alpha)
-            
             # สร้าง surface สำหรับ particle
             particle_surf = pygame.Surface((particle['size'] * 2, particle['size'] * 2), pygame.SRCALPHA)
             pygame.draw.circle(particle_surf, color, (particle['size'], particle['size']), particle['size'])
-            
             surface.blit(particle_surf, (int(particle['x'] - particle['size']), int(particle['y'] - particle['size'])))
 
     def draw_background_image(self, surface):
@@ -194,38 +179,47 @@ class UIManager:
         
         surface.blit(box_surf, rect.topleft)
 
+    def draw_glass_panel(self, surface, rect, alpha=80):
+        """วาดกล่องสไตล์ glass (โปร่งใส/ขาวเบลอ)"""
+        glass_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        # สีขาวโปร่งใส
+        glass_surf.fill((255, 255, 255, alpha))
+        # เพิ่มขอบขาวบางๆ
+        pygame.draw.rect(glass_surf, (255, 255, 255, min(120, alpha+40)), glass_surf.get_rect(), 2, border_radius=24)
+        # เพิ่มเงาเบาๆ
+        shadow = pygame.Surface((rect.width+12, rect.height+12), pygame.SRCALPHA)
+        pygame.draw.rect(shadow, (0,0,0,40), shadow.get_rect(), border_radius=28)
+        surface.blit(shadow, (rect.x-6, rect.y-6))
+        surface.blit(glass_surf, rect.topleft)
+
     def draw_animated_timer(self, surface, current_time, max_time, x, y, w, h=None):
-        """วาด timer แบบมีแอนิเมชัน"""
+        """วาดแถบเวลาแบบโมเดิร์นขาวเท่"""
         if h is None:
-            h = 28
-            
+            h = 8
         ratio = max(0, min(1, current_time / max_time))
-        
-        # วาดพื้นหลัง
         bg_rect = pygame.Rect(x, y, w, h)
-        self.draw_modern_box(surface, bg_rect, self.COLOR_TIMER_BG, shadow=False, corner_radius=4)
-        
-        # วาดแถบเวลา
+        bg_surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.rect(bg_surf, (*self.COLOR_ACCENT[:3], 100), bg_surf.get_rect(), border_radius=h//4)
+        surface.blit(bg_surf, bg_rect.topleft)
         if ratio > 0:
-            current_width = int(w * ratio)
-            min_fill = 4
-            actual_width = max(min_fill, current_width - 4)
-            current_rect = pygame.Rect(x + 2, y + 2, actual_width, h - 4)
-            
-            # เปลี่ยนสีตามเวลาที่เหลือ
-            if ratio > 0.5:
+            fill_w = max(h, int(w * ratio))
+            fill_rect = pygame.Rect(x, y, fill_w, h)
+            if ratio > 0.6:
                 color = self.COLOR_SUCCESS
-            elif ratio > 0.25:
+            elif ratio > 0.3:
                 color = self.COLOR_WARNING
             else:
                 color = self.COLOR_ERROR
-                # เพิ่มเอฟเฟกต์กะพริบเมื่อเวลาใกล้หมด
-                flash = abs(math.sin(self.animation_time * 8))
-                color = tuple(int(c * (0.5 + flash * 0.5)) for c in color)
-            
-            pygame.draw.rect(surface, color, current_rect, border_radius=4)
-        
-        # (ลบเลขเวลาออก ไม่ต้องวาดข้อความเวลา)
+            if ratio < 0.3:
+                pulse = abs(math.sin(self.animation_time * 8)) * 0.3 + 0.7
+                color = tuple(int(c * pulse) for c in color)
+            fill_surf = pygame.Surface((fill_w, h), pygame.SRCALPHA)
+            pygame.draw.rect(fill_surf, color, fill_surf.get_rect(), border_radius=h//4)
+            glow_surf = pygame.Surface((fill_w + 6, h + 6), pygame.SRCALPHA)
+            glow_color = (*color[:3], 50)
+            pygame.draw.rect(glow_surf, glow_color, glow_surf.get_rect(), border_radius=(h+6)//4)
+            surface.blit(glow_surf, (x - 3, y - 3))
+            surface.blit(fill_surf, fill_rect.topleft)
 
     def draw_combo_display(self, surface, combo_manager, x, y):
         """วาดการแสดงคอมโบแบบพิเศษ"""
@@ -277,54 +271,39 @@ class UIManager:
         surface.blit(money_surf, money_rect)
 
     def draw_enhanced_input_feedback(self, surface, target_word, user_input, center_pos):
-        """วาดการแสดงผลการพิมพ์แบบปรับปรุง"""
+        """วาดการแสดงผลการพิมพ์แบบโมเดิร์นขาวเท่ (แต่ใช้พื้นหลังสีเดิม) และแสดงตัวอักษรเป็นตัวใหญ่เสมอ ไม่มีวงกลมเรืองแสงหลังตัวอักษร"""
         x, y = center_pos
-        char_spacing = 70
-        
-        # วาดพื้นหลังสำหรับพื้นที่พิมพ์
-        total_width = len(target_word) * char_spacing
-        bg_rect = pygame.Rect(x - total_width//2 - 20, y - 60, total_width + 40, 120)
+        char_spacing = 80
+        total_width = len(target_word) * char_spacing + 40
+        bg_rect = pygame.Rect(x - total_width//2, y - 80, total_width, 160)
+        # ใช้กล่องสีเข้มแบบเดิม
         self.draw_modern_box(surface, bg_rect, color=(20, 20, 20, 150))
-        
-        for i, ch in enumerate(target_word):
+        focus_radius = 30 + abs(math.sin(self.animation_time * 4)) * 20
+        focus_surf = pygame.Surface((int(focus_radius * 2), int(focus_radius * 2)), pygame.SRCALPHA)
+        pygame.draw.circle(focus_surf, (*self.COLOR_INFO[:3], 30), (int(focus_radius), int(focus_radius)), int(focus_radius), 3)
+        surface.blit(focus_surf, (x - int(focus_radius), y - int(focus_radius)))
+        for i, ch in enumerate(target_word.upper()):
             char_x = x - (len(target_word)-1) * char_spacing // 2 + i * char_spacing
             char_y = y
-            
-            # กำหนดสีและเอฟเฟกต์
+            bounce = 0
             if i < len(user_input):
-                if user_input[i] == ch:
-                    # ถูกต้อง - สีเขียว
+                if user_input[i].upper() == ch:
                     color = self.COLOR_SUCCESS
-                    # เพิ่มเอฟเฟกต์ particle เมื่อพิมพ์ถูก
-                    if i == len(user_input) - 1:  # ตัวที่เพิ่งพิมพ์
-                        self.add_particle(char_x, char_y - 20, self.COLOR_SUCCESS, (0, -30), 1.5)
+                    bounce = math.sin(self.animation_time * 6 + i) * 5
+                    if i == len(user_input) - 1:
+                        self.add_particle(char_x, char_y, self.COLOR_SUCCESS, (0, -30), 1.5)
                 else:
-                    # ผิด - สีแดง
                     color = self.COLOR_ERROR
-                    # เอฟเฟกต์สั่น
-                    shake = math.sin(self.animation_time * 20) * 3
+                    shake = math.sin(self.animation_time * 15) * 4
                     char_x += shake
             elif i == len(user_input):
-                # ตัวที่กำลังจะพิมพ์ - สีฟ้าพร้อมเอฟเฟกต์เรืองแสง
-                color = self.COLOR_ACCENT
-                glow_alpha = int(abs(math.sin(self.animation_time * 5)) * 100)
-                
-                # วาดเรืองแสง
-                glow_surf = pygame.Surface((80, 80), pygame.SRCALPHA)
-                pygame.draw.circle(glow_surf, (*color[:3], glow_alpha), (40, 40), 40)
-                surface.blit(glow_surf, (char_x - 40, char_y - 40))
+                color = self.COLOR_INFO
+                bounce = math.sin(self.animation_time * 4) * 8
             else:
-                # ยังไม่ถึง - สีเทา
                 color = self.COLOR_TEXT_SECONDARY
-            
-            # วาดตัวอักษร
+            char_y += bounce
             char_surf = self.font_xlarge.render(ch, True, color)
             char_rect = char_surf.get_rect(center=(char_x, char_y))
-            
-            # เพิ่มเงาให้ตัวอักษร
-            shadow_surf = self.font_xlarge.render(ch, True, (0, 0, 0, 100))
-            shadow_rect = shadow_surf.get_rect(center=(char_x + 3, char_y + 3))
-            surface.blit(shadow_surf, shadow_rect)
             surface.blit(char_surf, char_rect)
 
     def trigger_success_effect(self, color=None):
@@ -334,7 +313,6 @@ class UIManager:
             self.current_success_color = color
         else:
             self.current_success_color = (50, 255, 50, 128)
-        
         # เพิ่ม particles
         center_x = self.SCREEN_WIDTH // 2
         center_y = self.SCREEN_HEIGHT // 2
@@ -359,10 +337,6 @@ class UIManager:
             vx = math.cos(math.radians(angle)) * 100
             vy = math.sin(math.radians(angle)) * 100
             self.add_particle(center_x, center_y, self.COLOR_ERROR, (vx, vy), 2.0)
-
-    def trigger_score_pop(self):
-        """เริ่มเอฟเฟกต์คะแนนกระโดด"""
-        self.score_pop_timer = 0.5
 
     def draw_success_overlay(self, surface):
         """วาดเลเยอร์ซ้อนทับเมื่อสำเร็จ"""
@@ -458,51 +432,41 @@ class UIManager:
             surface.blit(question_surf, question_rect)
 
     def draw_enhanced_growth_bar(self, surface, growth):
-        """วาดแถบการเติบโตแบบปรับปรุง"""
-        bar_w = 400
-        bar_h = 30
+        """วาดแถบการเติบโตแบบโมเดิร์นขาวเท่"""
+        bar_w = 450
+        bar_h = 16
         x = self.SCREEN_WIDTH // 2 - bar_w // 2
-        y = self.SCREEN_HEIGHT - bar_h - 40
-        
-        # วาดพื้นหลัง
+        y = self.SCREEN_HEIGHT - bar_h - 50
+        glow_alpha = int(abs(math.sin(self.animation_time * 2)) * 30 + 20)
+        glow_rect = pygame.Rect(x - 4, y - 4, bar_w + 8, bar_h + 8)
+        glow_surf = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
+        pygame.draw.rect(glow_surf, (255, 255, 255, glow_alpha), glow_surf.get_rect(), border_radius=12)
+        surface.blit(glow_surf, glow_rect.topleft)
         bg_rect = pygame.Rect(x, y, bar_w, bar_h)
-        self.draw_modern_box(surface, bg_rect, self.COLOR_TIMER_BG, corner_radius=5)
-        
-        # วาดแถบการเติบโต
+        bg_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
+        pygame.draw.rect(bg_surf, (220, 220, 220, 120), bg_surf.get_rect(), border_radius=8)
+        surface.blit(bg_surf, bg_rect.topleft)
         fill_w = int(bar_w * min(1.0, max(0.0, growth)))
-        min_fill = 4  # ความกว้างขั้นต่ำ
         if fill_w > 0:
-            actual_fill_w = max(min_fill, fill_w - 6)
-            fill_rect = pygame.Rect(x + 3, y + 3, actual_fill_w, bar_h - 6)
-            radius = max(2, min(5, fill_rect.width // 2))  # ปรับมุมให้สัมพันธ์กับขนาด
-            
-            # เปลี่ยนสีตามความคืบหน้า
-            if growth < 0.25:
-                color = (255, 100, 100)
-            elif growth < 0.5:
-                color = (255, 200, 100)
-            elif growth < 0.75:
-                color = (200, 255, 100)
-            else:
-                color = self.COLOR_SUCCESS
-
-            pygame.draw.rect(surface, color, fill_rect, border_radius=radius)
-
-            if actual_fill_w > 10:
-                highlight_rect = pygame.Rect(x + 3, y + 3, actual_fill_w, 8)
-                highlight_color = tuple(min(255, c + 50) for c in color[:3])
-                pygame.draw.rect(surface, highlight_color, highlight_rect, border_radius=radius)
-
-        # วาดเปอร์เซ็นต์
-        percent = int(growth * 100)
-        percent_surf = self.font_medium.render(f"{percent}%", True, self.COLOR_TEXT)
-        percent_rect = percent_surf.get_rect(center=(x + bar_w // 2, y + bar_h // 2))
-        
-        # วาดเงาให้ข้อความ
-        shadow_surf = self.font_medium.render(f"{percent}%", True, (0, 0, 0))
-        shadow_rect = shadow_surf.get_rect(center=(x + bar_w // 2 + 2, y + bar_h // 2 + 2))
-        surface.blit(shadow_surf, shadow_rect)
-        surface.blit(percent_surf, percent_rect)
+            actual_fill_w = max(8, fill_w - 4)
+            fill_rect = pygame.Rect(x + 2, y + 2, actual_fill_w, bar_h - 4)
+            wave_offset = math.sin(self.animation_time * 4) * 0.1
+            base_alpha = 220 + int(wave_offset * 35)
+            fill_surf = pygame.Surface((actual_fill_w, bar_h - 4), pygame.SRCALPHA)
+            pygame.draw.rect(fill_surf, (255, 255, 255, base_alpha), fill_surf.get_rect(), border_radius=6)
+            surface.blit(fill_surf, fill_rect.topleft)
+            if growth > 0.05:
+                sparkle_pos = int((actual_fill_w - 20) * abs(math.sin(self.animation_time * 3)))
+                sparkle_x = x + 2 + sparkle_pos
+                sparkle_y = y + bar_h // 2
+                for i in range(3):
+                    offset = (i - 1) * 4
+                    sparkle_alpha = 255 - i * 80
+                    pygame.draw.circle(surface, (255, 255, 255, sparkle_alpha), 
+                                     (sparkle_x + offset, sparkle_y), 2 - i)
+        border_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
+        pygame.draw.rect(border_surf, (255, 255, 255, 80), border_surf.get_rect(), 1, border_radius=8)
+        surface.blit(border_surf, bg_rect.topleft)
 
     def draw_all(self, surface, game_state):
         """วาดทุกอย่างด้วยเลย์เอาต์ใหม่"""
@@ -543,7 +507,7 @@ class UIManager:
         timer_x = 0
         timer_y = 0
         timer_w = self.SCREEN_WIDTH
-        timer_h = 20
+        timer_h = 10
         self.draw_animated_timer(surface, game_state['timer'], game_state['max_time'], 
                                timer_x, timer_y, timer_w, timer_h)
         

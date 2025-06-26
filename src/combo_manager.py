@@ -18,4 +18,4 @@ class ComboManager:
 
     def get_display_value(self):
         """ส่งค่าคอมโบสำหรับแสดงผล"""
-        return f"Combo {self.combo}x" 
+        return f"COMBO {self.combo}x" 
