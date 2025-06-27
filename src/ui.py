@@ -1,6 +1,8 @@
 import pygame
 import math
 import os
+import random
+from .explosion_particles import FireworkExplosion
 
 class UIManager:
     """จัดการการวาดองค์ประกอบ UI ทั้งหมด - ปรับปรุงแล้ว"""
@@ -87,8 +89,9 @@ class UIManager:
         self.tree_anim_timer = 0.0
         self.tree_sway_offset = 0.0
         
-        # --- Particle System ---
-        self.particles = []
+        # --- Explosion Particle System ---
+        self.firework = FireworkExplosion()
+        self.last_exploded_chars = set()
         
         # --- Layout Constants ---
         self.PADDING = 20
@@ -98,51 +101,14 @@ class UIManager:
     def update(self, dt):
         """อัปเดตแอนิเมชันทั้งหมด"""
         self.animation_time += dt
-        # อัปเดต particle system
-        self.update_particles(dt)
+        # อัปเดต explosion particles
+        self.firework.update(dt)
         # อัปเดต UI animations
         self.ui_pulse_alpha = abs(math.sin(self.animation_time * 3)) * 50
         # อัปเดต tree sway
         self.tree_sway_offset = math.sin(self.animation_time * 2) * 3
         # อัปเดต combo glow
         self.combo_glow_intensity = abs(math.sin(self.animation_time * 4)) * 0.5 + 0.5
-
-    def add_particle(self, x, y, color, velocity=(0, -50), lifetime=2.0):
-        """เพิ่ม particle effect"""
-        particle = {
-            'x': x,
-            'y': y,
-            'vx': velocity[0] + (pygame.time.get_ticks() % 20 - 10) * 0.1,
-            'vy': velocity[1],
-            'color': color,
-            'lifetime': lifetime,
-            'max_lifetime': lifetime,
-            'size': 4
-        }
-        self.particles.append(particle)
-
-    def update_particles(self, dt):
-        """อัปเดต particle system"""
-        for particle in self.particles[:]:
-            particle['x'] += particle['vx'] * dt
-            particle['y'] += particle['vy'] * dt
-            particle['vy'] += 100 * dt  # gravity
-            particle['lifetime'] -= dt
-            # ลด size ตามเวลา
-            progress = particle['lifetime'] / particle['max_lifetime']
-            particle['size'] = max(1, int(4 * progress))
-            if particle['lifetime'] <= 0:
-                self.particles.remove(particle)
-
-    def draw_particles(self, surface):
-        """วาด particles"""
-        for particle in self.particles:
-            alpha = int(255 * (particle['lifetime'] / particle['max_lifetime']))
-            color = (*particle['color'][:3], alpha)
-            # สร้าง surface สำหรับ particle
-            particle_surf = pygame.Surface((particle['size'] * 2, particle['size'] * 2), pygame.SRCALPHA)
-            pygame.draw.circle(particle_surf, color, (particle['size'], particle['size']), particle['size'])
-            surface.blit(particle_surf, (int(particle['x'] - particle['size']), int(particle['y'] - particle['size'])))
 
     def draw_background_image(self, surface):
         """วาดรูปภาพพื้นหลัง"""
@@ -282,20 +248,28 @@ class UIManager:
         focus_surf = pygame.Surface((int(focus_radius * 2), int(focus_radius * 2)), pygame.SRCALPHA)
         pygame.draw.circle(focus_surf, (*self.COLOR_INFO[:3], 30), (int(focus_radius), int(focus_radius)), int(focus_radius), 3)
         surface.blit(focus_surf, (x - int(focus_radius), y - int(focus_radius)))
+        # วาด firework ก่อนตัวอักษร
+        self.firework.draw(surface)
         for i, ch in enumerate(target_word.upper()):
             char_x = x - (len(target_word)-1) * char_spacing // 2 + i * char_spacing
             char_y = y
             bounce = 0
+            # ป้องกัน index out of range
             if i < len(user_input):
                 if user_input[i].upper() == ch:
                     color = self.COLOR_SUCCESS
                     bounce = math.sin(self.animation_time * 6 + i) * 5
-                    if i == len(user_input) - 1:
-                        self.add_particle(char_x, char_y, self.COLOR_SUCCESS, (0, -30), 1.5)
+                    char_key = (target_word, i)
+                    if char_key not in self.last_exploded_chars:
+                        self.firework.explode(char_x, char_y, base_color=self.COLOR_SUCCESS, count=8)
+                        self.last_exploded_chars.add(char_key)
                 else:
+                    # Trigger error effect เฉพาะเมื่อเปลี่ยน error (ไม่ trigger ซ้ำทุก frame)
+                    char_key = (target_word, i, 'error')
+                    if char_key not in self.last_exploded_chars:
+                        self.trigger_error_effect(char_x, char_y, color=self.COLOR_ERROR)
+                        self.last_exploded_chars.add(char_key)
                     color = self.COLOR_ERROR
-                    shake = math.sin(self.animation_time * 15) * 4
-                    char_x += shake
             elif i == len(user_input):
                 color = self.COLOR_INFO
                 bounce = math.sin(self.animation_time * 4) * 8
@@ -309,34 +283,30 @@ class UIManager:
     def trigger_success_effect(self, color=None):
         """เริ่มเอฟเฟกต์ความสำเร็จ"""
         self.success_effect_alpha = 150
+        self.last_exploded_chars = set()
         if color:
             self.current_success_color = color
         else:
             self.current_success_color = (50, 255, 50, 128)
-        # เพิ่ม particles
+        # Add sparks for success
         center_x = self.SCREEN_WIDTH // 2
         center_y = self.SCREEN_HEIGHT // 2
-        for _ in range(10):
-            angle = pygame.time.get_ticks() % 360
-            vx = math.cos(math.radians(angle)) * 100
-            vy = math.sin(math.radians(angle)) * 100
-            self.add_particle(center_x, center_y, self.COLOR_SUCCESS, (vx, vy), 2.0)
 
-    def trigger_error_effect(self, color=None):
+    def trigger_error_effect(self, char_x=None, char_y=None, color=None):
         """เริ่มเอฟเฟกต์ความผิดพลาด"""
         self.success_effect_alpha = 150
+        self.last_exploded_chars = set()
         if color:
             self.current_success_color = color
         else:
             self.current_success_color = (255, 0, 0, 128)
-        # เพิ่ม particles สีแดง
-        center_x = self.SCREEN_WIDTH // 2
-        center_y = self.SCREEN_HEIGHT // 2
-        for _ in range(10):
-            angle = pygame.time.get_ticks() % 360
-            vx = math.cos(math.radians(angle)) * 100
-            vy = math.sin(math.radians(angle)) * 100
-            self.add_particle(center_x, center_y, self.COLOR_ERROR, (vx, vy), 2.0)
+        # Add sparks for error
+        if char_x is not None and char_y is not None:
+            self.firework.explode(char_x, char_y, base_color=self.COLOR_ERROR, count=8)
+        else:
+            center_x = self.SCREEN_WIDTH // 2
+            center_y = self.SCREEN_HEIGHT // 2
+            self.firework.explode(center_x, center_y, base_color=self.COLOR_ERROR, count=8)
 
     def draw_success_overlay(self, surface):
         """วาดเลเยอร์ซ้อนทับเมื่อสำเร็จ"""
@@ -364,12 +334,6 @@ class UIManager:
             self.current_tree_index = idx
             self.tree_anim_direction = -1
             self.tree_anim_timer = 0.0
-            
-            # เพิ่ม particle เมื่อต้นไม้เติบโต
-            tree_x = self.SCREEN_WIDTH // 2
-            tree_y = int(self.SCREEN_HEIGHT * 0.85)  # ปรับตำแหน่งให้ตรงกับต้นไม้ใหม่
-            for _ in range(5):
-                self.add_particle(tree_x, tree_y, self.COLOR_SUCCESS, (0, -50), 1.0)
         
         # อัปเดตแอนิเมชันการเปลี่ยนขนาด
         if self.tree_anim_direction == -1:
@@ -468,9 +432,17 @@ class UIManager:
         pygame.draw.rect(border_surf, (255, 255, 255, 80), border_surf.get_rect(), 1, border_radius=8)
         surface.blit(border_surf, bg_rect.topleft)
 
+    def draw_shop_button(self, surface, rect):
+        # วาดปุ่มร้านค้า (มุมล่างขวา)
+        pygame.draw.rect(surface, self.COLOR_ACCENT, rect, border_radius=14)
+        pygame.draw.rect(surface, (255,255,255), rect, 2, border_radius=14)
+        font = self.font_medium
+        label = font.render("ร้านค้า", True, (0,0,0))
+        label_rect = label.get_rect(center=rect.center)
+        surface.blit(label, label_rect)
+
     def draw_all(self, surface, game_state):
         """วาดทุกอย่างด้วยเลย์เอาต์ใหม่"""
-        # อัปเดตแอนิเมชัน
         dt = 1/60  # สมมติ 60 FPS
         self.update(dt)
         
@@ -510,14 +482,3 @@ class UIManager:
         timer_h = 10
         self.draw_animated_timer(surface, game_state['timer'], game_state['max_time'], 
                                timer_x, timer_y, timer_w, timer_h)
-        
-        # วาดระบบ particle
-        self.draw_particles(surface)
-        
-
-    def create_floating_text(self, text, x, y, color, duration=2.0):
-        """สร้างข้อความลอย (สำหรับแสดงคะแนนที่ได้)"""
-        self.add_particle(x, y, color, (0, -80), duration)
-        
-        # เพิ่มข้อความลอยถ้าต้องการ (ต้องสร้างระบบแยก)
-        pass
