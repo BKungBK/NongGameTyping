@@ -3,15 +3,22 @@ import math
 import os
 import random
 from .explosion_particles import FireworkExplosion
+from .diamond_button import DiamondButton
+from .data_manager import DataManager
 
 class UIManager:
     """จัดการการวาดองค์ประกอบ UI ทั้งหมด - ปรับปรุงแล้ว"""
-    def __init__(self, screen_width, screen_height):
+    def __init__(self, screen_width, screen_height, sound_manager=None):
         # --- ค่าคงที่ ---
         self.SCREEN_WIDTH = screen_width
         self.SCREEN_HEIGHT = screen_height
-        self.FONT_PATH = os.path.join('assets', 'fonts', 'PressStart2P-Regular.ttf')
-        self.FONT_PATH_X = os.path.join('assets', 'fonts', 'PressStart2P-Regular.ttf')
+        
+        # Initialize data manager for asset paths
+        self.data_manager = DataManager()
+        
+        # Get asset paths from data manager
+        self.FONT_PATH = self.data_manager.get_assets_path("fonts", "PressStart2P-Regular.ttf")
+        self.FONT_PATH_X = self.data_manager.get_assets_path("fonts", "PressStart2P-Regular.ttf")
         
         # --- สีสำหรับธีมเกม ---
         self.COLOR_TEXT = (255, 255, 255)
@@ -47,7 +54,7 @@ class UIManager:
         # --- โหลดรูปภาพพื้นหลัง ---
         self.background_image = None
         try:
-            bg_path = os.path.join('assets', 'images', 'bg.png')
+            bg_path = self.data_manager.get_assets_path("images", "bg.png")
             if os.path.exists(bg_path):
                 self.background_image = pygame.image.load(bg_path).convert()
                 # ปรับขนาดให้พอดีกับหน้าจอ
@@ -76,7 +83,7 @@ class UIManager:
         # --- Tree Animation (improved) ---
         self.tree_images = []
         for idx in range(1, 5):
-            path = os.path.join('assets', 'images\\Tree_Growain', f'tree{idx}.png')
+            path = self.data_manager.get_assets_path("images", f"Tree_Growain/tree{idx}.png")
             if os.path.exists(path):
                 img = pygame.image.load(path).convert_alpha()
                 self.tree_images.append(img)
@@ -92,11 +99,48 @@ class UIManager:
         # --- Explosion Particle System ---
         self.firework = FireworkExplosion()
         self.last_exploded_chars = set()
-        
         # --- Layout Constants ---
         self.PADDING = 20
         self.CORNER_RADIUS = 15
         self.SHADOW_OFFSET = 6
+
+        # --- DiamondButton (Gacha) ---
+        gacha_icon_path = self.data_manager.get_assets_path("images", "icon_gacha.png")
+        self.gacha_icon = None
+        if os.path.exists(gacha_icon_path):
+            try:
+                self.gacha_icon = pygame.image.load(gacha_icon_path).convert_alpha()
+            except Exception as e:
+                print(f"Error loading gacha icon: {e}")
+                self.gacha_icon = self._create_gacha_icon()
+        else:
+            # Create a programmatic gacha icon
+            self.gacha_icon = self._create_gacha_icon()
+        
+        # --- DiamondButton (Collection) ---
+        collection_icon_path = self.data_manager.get_assets_path("images", "icon_collection.png")
+        self.collection_icon = None
+        if os.path.exists(collection_icon_path):
+            try:
+                self.collection_icon = pygame.image.load(collection_icon_path).convert_alpha()
+            except Exception as e:
+                print(f"Error loading collection icon: {e}")
+                self.collection_icon = self._create_collection_icon()
+        else:
+            # Create a programmatic collection icon
+            self.collection_icon = self._create_collection_icon()
+        
+        btn_size = 120
+        btn_x = self.SCREEN_WIDTH - btn_size - 32
+        btn_y = self.SCREEN_HEIGHT - btn_size - 32
+        self.sound_manager = sound_manager
+        self.gacha_button = DiamondButton(btn_x + btn_size//2, btn_y + btn_size//2, btn_size, self.gacha_icon, sound_manager=self.sound_manager)
+        
+        # --- DiamondButton ตัวที่สอง (Collection) ---
+        gap = 20  # ระยะห่างระหว่างปุ่ม
+        btn2_x = btn_x  # ตำแหน่ง x เดียวกับปุ่มแรก
+        btn2_y = btn_y - btn_size - gap  # ด้านบนของปุ่มแรก
+        self.collection_button = DiamondButton(btn2_x + btn_size//2, btn2_y + btn_size//2, btn_size, self.collection_icon, sound_manager=self.sound_manager)
 
     def update(self, dt):
         """อัปเดตแอนิเมชันทั้งหมด"""
@@ -109,6 +153,11 @@ class UIManager:
         self.tree_sway_offset = math.sin(self.animation_time * 2) * 3
         # อัปเดต combo glow
         self.combo_glow_intensity = abs(math.sin(self.animation_time * 4)) * 0.5 + 0.5
+        # อัปเดตปุ่มกาชา
+        # mouse_pos = pygame.mouse.get_pos()
+        # self.gacha_button.update(dt, mouse_pos)
+        self.gacha_button.update_animation(dt)
+        self.collection_button.update_animation(dt)
 
     def draw_background_image(self, surface):
         """วาดรูปภาพพื้นหลัง"""
@@ -432,15 +481,6 @@ class UIManager:
         pygame.draw.rect(border_surf, (255, 255, 255, 80), border_surf.get_rect(), 1, border_radius=8)
         surface.blit(border_surf, bg_rect.topleft)
 
-    def draw_shop_button(self, surface, rect):
-        # วาดปุ่มร้านค้า (มุมล่างขวา)
-        pygame.draw.rect(surface, self.COLOR_ACCENT, rect, border_radius=14)
-        pygame.draw.rect(surface, (255,255,255), rect, 2, border_radius=14)
-        font = self.font_medium
-        label = font.render("ร้านค้า", True, (0,0,0))
-        label_rect = label.get_rect(center=rect.center)
-        surface.blit(label, label_rect)
-
     def draw_all(self, surface, game_state):
         """วาดทุกอย่างด้วยเลย์เอาต์ใหม่"""
         dt = 1/60  # สมมติ 60 FPS
@@ -448,6 +488,14 @@ class UIManager:
         
         # วาดพื้นหลัง (ใช้รูปภาพแทน gradient และดิน)
         self.draw_background_image(surface)
+        particle_time = pygame.time.get_ticks() / 1000.0
+        for i in range(20):
+            x = (i * 137 + particle_time * 20) % self.SCREEN_WIDTH
+            y = (i * 47 + math.sin(particle_time + i) * 30) % self.SCREEN_HEIGHT
+            alpha = int(abs(math.sin(particle_time + i)) * 100 + 50)
+            particle_surf = pygame.Surface((6, 6), pygame.SRCALPHA)
+            pygame.draw.circle(particle_surf, (255, 255, 255, alpha), (3, 3), 3)
+            surface.blit(particle_surf, (x, y))
         
         # วาดเอฟเฟกต์ความสำเร็จ
         self.draw_success_overlay(surface)
@@ -466,9 +514,8 @@ class UIManager:
         self.draw_enhanced_growth_bar(surface, game_state.get('plant_growth', 0.0))
         
         # วาดจอแสดงเงิน (มุมขวาบน)
-        money_x = self.SCREEN_WIDTH - 150
-        money_y = 30
-        self.draw_money_display(surface, game_state['money_manager'], money_x, money_y)
+        # เรียกโดยไม่ส่ง x, y เพื่อให้กล่อง coin auto-align ชิดขวาเสมอ (ป้องกันล้นขอบ)
+        self.draw_money_display(surface, game_state['money_manager'], None, 20)
         
         # วาดจอแสดงคอมโบ (มุมซ้ายล่าง)
         combo_x = 40
@@ -482,3 +529,103 @@ class UIManager:
         timer_h = 10
         self.draw_animated_timer(surface, game_state['timer'], game_state['max_time'], 
                                timer_x, timer_y, timer_w, timer_h)
+        
+        # วาดปุ่มกาชามุมล่างขวา
+        self.gacha_button.draw(surface)
+        # วาดปุ่มกาชาตัวที่สองมุมซ้ายล่าง
+        self.collection_button.draw(surface)
+
+    def draw_gacha_coin_display(self, surface, money_manager):
+        """วาดการแสดง coin สำหรับหน้า gacha (มุมขวาบน)"""
+        money_text = money_manager.get_display_value()
+        
+        # เตรียม surface ของข้อความและไอคอน
+        money_surf = self.font_medium.render(money_text, True, (255, 223, 0))
+        symbol_surf = self.font_small.render("¢", True, (200, 150, 0))
+        
+        padding_x = 18
+        padding_y = 10
+        spacing = 20
+        icon_diameter = 36  # 18*2
+        content_height = max(money_surf.get_height(), icon_diameter, symbol_surf.get_height())
+        box_w = icon_diameter + spacing + money_surf.get_width() + padding_x * 2
+        box_h = content_height + padding_y * 2
+        
+        # กล่องชิดขวาบน
+        x = self.SCREEN_WIDTH - box_w - 8  # 8px margin
+        y = 8
+        box_rect = pygame.Rect(x, y, box_w, box_h)
+        self.draw_modern_box(surface, box_rect, color=(50, 50, 30, 200))
+        
+        # วาดไอคอนเหรียญ (ชิดซ้าย)
+        coin_center = (box_rect.left + padding_x + icon_diameter // 2, box_rect.centery)
+        coin_bounce = math.sin(self.animation_time * 6) * 2
+        coin_y = coin_center[1] + coin_bounce
+        pygame.draw.circle(surface, (255, 215, 0), (coin_center[0], int(coin_y)), 18)
+        pygame.draw.circle(surface, (255, 165, 0), (coin_center[0], int(coin_y)), 18, 3)
+        # วาดสัญลักษณ์เหรียญ
+        symbol_rect = symbol_surf.get_rect(center=(coin_center[0], int(coin_y)))
+        surface.blit(symbol_surf, symbol_rect)
+        
+        # วาดจำนวนเงิน (ชิดขวา)
+        money_rect = money_surf.get_rect()
+        money_rect.centery = box_rect.centery
+        money_rect.right = box_rect.right - padding_x
+        surface.blit(money_surf, money_rect)
+
+    def handle_event(self, event):
+        """Handle events for UI elements (DiamondButton)"""
+        # ตรวจสอบปุ่มทั้งสองตัว
+        if self.gacha_button.handle_event(event):
+            if self.sound_manager:
+                self.sound_manager.play_sfx('button')
+            return "gacha"
+        if self.collection_button.handle_event(event):
+            if self.sound_manager:
+                self.sound_manager.play_sfx('button')
+            return "collection"
+        return None
+
+    def _create_collection_icon(self):
+        """Create a collection icon programmatically"""
+        # Create a surface for the collection icon
+        icon_size = 120
+        icon_surface = pygame.Surface((icon_size, icon_size), pygame.SRCALPHA)
+        
+        # Create a book/collection icon using text
+        try:
+            # Try to use a large font for the icon
+            icon_font = pygame.font.Font(None, 80)
+            icon_text = "📚"  # Book emoji for collection
+            text_surface = icon_font.render(icon_text, True, (255, 255, 255))
+            text_rect = text_surface.get_rect(center=(icon_size//2, icon_size//2))
+            icon_surface.blit(text_surface, text_rect)
+        except Exception as e:
+            print(f"Error creating collection icon: {e}")
+            # Fallback: create a simple colored square
+            pygame.draw.rect(icon_surface, (100, 200, 255), (20, 20, icon_size-40, icon_size-40))
+            pygame.draw.rect(icon_surface, (255, 255, 255), (20, 20, icon_size-40, icon_size-40), 3)
+        
+        return icon_surface
+
+    def _create_gacha_icon(self):
+        """Create a programmatic gacha icon"""
+        # Create a surface for the gacha icon
+        icon_size = 120
+        icon_surface = pygame.Surface((icon_size, icon_size), pygame.SRCALPHA)
+        
+        # Create a gacha icon using text
+        try:
+            # Try to use a large font for the icon
+            icon_font = pygame.font.Font(None, 80)
+            icon_text = "🎲"  # Dice emoji for gacha
+            text_surface = icon_font.render(icon_text, True, (255, 255, 255))
+            text_rect = text_surface.get_rect(center=(icon_size//2, icon_size//2))
+            icon_surface.blit(text_surface, text_rect)
+        except Exception as e:
+            print(f"Error creating gacha icon: {e}")
+            # Fallback: create a simple colored square
+            pygame.draw.rect(icon_surface, (100, 200, 255), (20, 20, icon_size-40, icon_size-40))
+            pygame.draw.rect(icon_surface, (255, 255, 255), (20, 20, icon_size-40, icon_size-40), 3)
+        
+        return icon_surface
